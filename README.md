@@ -1,9 +1,11 @@
 # gsDose Skill for Claude Code
 
-A [Claude Code](https://claude.ai/code) skill for designing multi-arm multi-stage
-(MAMS) seamless phase 2/3 group sequential trials with dose selection, built on the
-R package [gsDose](https://github.com/eric-zhang16/gsDose) (Zhang & Jin 2025,
-doi:10.1080/19466315.2025.2539831).
+A [Claude Code](https://claude.ai/code) skill for **inferentially seamless phase 2/3
+adaptive designs with dose selection in the phase 2 part** — multi-arm multi-stage
+(MAMS) group sequential trials where one dose is selected at an interim and patients
+from before and after dose selection are combined in the confirmatory inference.
+Built on the R package [gsDose](https://github.com/eric-zhang16/gsDose)
+(Zhang & Jin 2025, doi:10.1080/19466315.2025.2539831).
 
 **Status: v0.1** — both workflows implemented and benchmarked: the bundled
 scripts and the end-to-end eval reproduce the package vignette's results exactly

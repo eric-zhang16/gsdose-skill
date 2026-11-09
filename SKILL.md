@@ -1,13 +1,15 @@
 ---
 name: gsdose
 description: >
-  Design and analyze multi-arm multi-stage (MAMS) seamless phase 2/3 group sequential
-  trials with dose selection for oncology survival endpoints, using the R package gsDose
-  (Zhang & Jin 2025): inverse normal combination tests across pre/post dose-selection
-  cohorts, Dunnett-based closed testing across dose arms, and alpha-spending efficacy
-  boundaries. Triggers on: seamless phase 2/3 design, dose selection at interim,
-  multi-arm multi-stage survival trial, combination test, Dunnett closed testing,
-  adaptive dose dropping with group sequential boundaries, or any mention of gsDose.
+  Design and analyze inferentially seamless phase 2/3 adaptive trials with dose
+  selection in the phase 2 part — multi-arm multi-stage (MAMS) group sequential
+  designs for oncology survival endpoints — using the R package gsDose (Zhang & Jin
+  2025): inverse normal combination tests across pre/post dose-selection cohorts,
+  Dunnett-based closed testing across dose arms, and alpha-spending efficacy
+  boundaries. Triggers on: inferentially seamless or seamless phase 2/3 design,
+  adaptive phase 2/3, dose selection at interim, multi-arm multi-stage survival
+  trial, combination test, Dunnett closed testing, adaptive dose dropping with
+  group sequential boundaries, or any mention of gsDose.
 ---
 
 ## Bundled Resources
