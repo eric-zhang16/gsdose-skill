@@ -54,12 +54,14 @@ writing the report are separate turns; don't bundle them into one response.
 
 ### Boundary calculation (both workflows, after Q12; workflow A stops at A7)
 
-A1. **Create the output folder** `output/gsdose_{indication}_{YYYYMMDD}/`.
+A1. **Create the output folder** `output/gsdose_{indication}_{YYYYMMDD}/`
+    (indication from Q2b) with two subfolders: `deliverables/` (what the user
+    hands to reviewers: report, results JSON, reproduction script) and
+    `supporting/` (configs and script copies — the reproducibility trail).
 
 A2. **Stage weights, if derived (Q10 = B):** write the w-weights config JSON
-    (schema in the header of `scripts/compute_w_weights.R`) into the output
-    folder and run:
-    `Rscript scripts/compute_w_weights.R <out>/w_config.json <out>/w_results.json`
+    (schema in the header of `scripts/compute_w_weights.R`) and run:
+    `Rscript scripts/compute_w_weights.R <out>/supporting/w_config.json <out>/supporting/w_results.json`
     This yields `w`, expected cohort-1/cohort-2 events, and expected analysis
     times. Show the user the w matrix and confirm (per Q10).
 
@@ -71,7 +73,7 @@ A3. **Assemble per-stage events:**
       events enter as `planD`, never as a row of `d` (see the vignette: at IA3,
       d = c(270, 430) with s = 3, planD = 520).
 
-A4. **Write the boundary config** `<out>/gsdose_boundary_config.json` — schema in
+A4. **Write the boundary config** `<out>/supporting/gsdose_boundary_config.json` — schema in
     the header of `scripts/compute_boundary.R`. Put every design assumption the
     report needs in `meta` (disease, endpoints, k_dose_arms, randomization_ratio,
     n1_per_arm, n2_per_arm, total_N, ctrl_median, hr, dropout_rate,
@@ -79,15 +81,15 @@ A4. **Write the boundary config** `<out>/gsdose_boundary_config.json` — schema
     design value into the report.
 
 A5. **Compute boundaries:**
-    `Rscript scripts/compute_boundary.R <out>/gsdose_boundary_config.json <out>/gsdose_results.json`
+    `Rscript scripts/compute_boundary.R <out>/supporting/gsdose_boundary_config.json <out>/deliverables/gsdose_results.json`
     One endpoint entry per endpoint (Q6); efficacy always, futility when Q12 = B.
 
 A6. **Generate the Word report:**
-    `python scripts/gsdose_report_template.py <out>`
-    produces `gsdose_report.docx` with: 1. Design Assumptions, 2. Interim/Final
-    Analysis Plan, 3. Efficacy Boundaries.
+    `python scripts/gsdose_report_template.py <out>/deliverables`
+    produces `deliverables/gsdose_report.docx` with: 1. Design Assumptions,
+    2. Interim/Final Analysis Plan, 3. Efficacy Boundaries.
 
-A6b. **Write the reproduction script** `<out>/gsdose_reproduce.R` — a
+A6b. **Write the reproduction script** `<out>/deliverables/gsdose_reproduce.R` — a
     SELF-CONTAINED R script that reproduces every reported number with direct
     gsDose calls and the actual design values inlined (follow the patterns in
     `examples.md`: w derivation if Q10 = B, h, gsBoundary per endpoint, and — in
@@ -96,20 +98,22 @@ A6b. **Write the reproduction script** `<out>/gsdose_reproduce.R` — a
     **Run it once and check its printed boundaries (and test statistics) match
     `gsdose_results.json` before delivering; fix any mismatch first.**
 
-A7. **Deliver** — copy the scripts used into the output folder, report the path,
-    and summarize the boundaries (Z and nominal p per analysis) in chat.
+A7. **Deliver** — copy the bundled scripts used into `supporting/`, report the
+    path, and summarize the boundaries (Z and nominal p per analysis) in chat.
 
 Output structure:
 
 ```
 output/gsdose_{indication}_{YYYYMMDD}/
-├── gsdose_report.docx                    # combined result summary (Word)
-├── gsdose_results.json                   # combined result summary (JSON;
-│                                         #   workflow B merges test results in)
-├── gsdose_reproduce.R                    # standalone script reproducing all numbers
-├── w_config.json / w_results.json        # only when Q10 = B
-├── gsdose_boundary_config.json / gsdose_test_config.json
-└── (copies of the bundled scripts used)
+├── deliverables/
+│   ├── gsdose_report.docx                # combined result summary (Word)
+│   ├── gsdose_results.json               # combined result summary (JSON;
+│   │                                     #   workflow B merges test results in)
+│   └── gsdose_reproduce.R                # standalone script reproducing all numbers
+└── supporting/
+    ├── w_config.json / w_results.json    # only when Q10 = B
+    ├── gsdose_boundary_config.json / gsdose_test_config.json
+    └── (copies of the bundled scripts used)
 ```
 
 ### Workflow B — combination test + closed testing (continues after A5)
@@ -145,14 +149,14 @@ One number.
 
 **Compute steps:**
 
-B1. **Write the test config** `<out>/gsdose_test_config.json` (schema in the
-    header of `scripts/compute_test.R`): the endpoint name (must match the
+B1. **Write the test config** `<out>/supporting/gsdose_test_config.json` (schema
+    in the header of `scripts/compute_test.R`): the endpoint name (must match the
     results JSON), current stage k, the w matrix (row k is used), h, z1, d1, z2,
     sid, ratio (Q4b), and `zbound` = the current stage's efficacy bound from
-    `gsdose_results.json` (plus `z_lower` if Q12 added a futility bound).
+    `deliverables/gsdose_results.json` (plus `z_lower` if Q12 added a futility bound).
 
 B2. **Run the test:**
-    `Rscript scripts/compute_test.R <out>/gsdose_test_config.json <out>/gsdose_results.json`
+    `Rscript scripts/compute_test.R <out>/supporting/gsdose_test_config.json <out>/deliverables/gsdose_results.json`
     This calls `combTest` (Dunnett-based closed testing across all intersection
     hypotheses containing the selected dose) and MERGES the results into
     `gsdose_results.json` under the endpoint's `test` field — the bundle keeps
@@ -166,7 +170,7 @@ B3. **Conclude by closed testing:** the selected dose's hypothesis is rejected
     hypothesis's combination Z crossed it (informational — stopping for futility
     is the sponsor's call).
 
-B4. **Report:** `python scripts/gsdose_report_template.py <out>` — regenerates
+B4. **Report:** `python scripts/gsdose_report_template.py <out>/deliverables` — regenerates
     the ONE combined Word report; endpoints carrying test results get
     "4. Combination Test and Closed Testing". Extend `gsdose_reproduce.R` with
     the combTest call and observed data (A6b), verify it reproduces the test
@@ -224,6 +228,10 @@ user choose; the only defaults are the ones a question itself defines.
    occurred (Q8 = B); if the user picks B but says "design stage" at Q8, point out
    the mismatch and resolve it before continuing. After the boundary step,
    workflow A stops and workflow B continues with the observed-data intake.
+
+   2b. **Disease / indication.** "What disease and treatment line is this trial
+   for? (e.g., '1L melanoma', '2L NSCLC')" — free text, one line. It names the
+   output folder and appears in the report header.
 
 3. **Number of dose arms.** "How many dose arms will the trial start with — not
    counting the control arm? **Note: only ONE dose arm will be selected at the
