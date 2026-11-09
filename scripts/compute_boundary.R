@@ -21,6 +21,9 @@
 #       "sf": "OF",                       # 'OF' or 'HSD' (Q11b)
 #       "sfpar": null,                    # gamma, required when sf='HSD'
 #       "futility": {"enabled": true, "total": 0.975, "sf": "HSD", "sfpar": -6},
+#       "alpha_sensitivity": [0.024, 0.025],    # optional extra alpha levels; each
+#                                               # gets its own boundary set (futility
+#                                               # spends 1 - that alpha, same sf/sfpar)
 #       "expected_time": [52.3, 76.7, 102.5]   # optional, from compute_w_weights.R
 #     }
 #   ]
@@ -104,6 +107,29 @@ for (i in seq_along(cfg$endpoints)) {
   if (!is.null(ep$expected_time))
     stage_tbl$expected_time <- round(num_vec(ep$expected_time), 1)
 
+  # optional sensitivity view: boundaries at additional alpha levels
+  sens <- NULL
+  if (!is.null(ep$alpha_sensitivity)) {
+    alphas_x <- num_vec(ep$alpha_sensitivity)
+    sens <- lapply(alphas_x, function(a_k) {
+      up_k <- gsBoundary(w, h, d, d2, s = s, planD = planD,
+                         alpha = a_k, sf = sf, sfpar = sfpar, bt = "upper")
+      stg <- data.frame(
+        stage           = up_k$Z$stage,
+        z_upper         = round(up_k$Z$Zbound, 4),
+        nominal_p_upper = signif(pnorm(up_k$Z$Zbound, lower.tail = FALSE), 4)
+      )
+      if (fut_enabled) {
+        fsfpar_k <- if (is.null(fut$sfpar)) NULL else as.numeric(fut$sfpar)
+        lo_k <- gsBoundary(w, h, d, d2, s = s, planD = planD,
+                           alpha = 1 - a_k, sf = fut$sf,
+                           sfpar = fsfpar_k, bt = "lower")
+        stg$z_lower <- round(lo_k$Z$Zbound, 4)
+      }
+      list(alpha = a_k, stages = stg)
+    })
+  }
+
   results[[i]] <- list(
     name     = null_or(ep$name, paste0("endpoint_", i)),
     s        = s,
@@ -114,7 +140,8 @@ for (i in seq_along(cfg$endpoints)) {
     futility = fut,
     h        = h,
     w        = w,
-    stages   = stage_tbl
+    stages   = stage_tbl,
+    sensitivity = sens
   )
 }
 

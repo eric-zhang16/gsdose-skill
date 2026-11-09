@@ -276,15 +276,44 @@ for ep in endpoints:
     fut = ep.get("futility") or {}
     has_lower = fut.get("enabled") and any("z_lower" in st for st in stages)
 
-    n_cols = 4 if has_lower else 3
-    t = doc.add_table(rows=1, cols=n_cols)
+    # alpha groups: the assigned alpha first, then any sensitivity alphas
+    groups = [{"alpha": ep.get("alpha"),
+               "stages": {st["stage"]: st for st in stages}}]
+    for sg in (ep.get("sensitivity") or []):
+        groups.append({"alpha": sg.get("alpha"),
+                       "stages": {st["stage"]: st for st in sg.get("stages", [])}})
+
+    per_a = 2 if has_lower else 1
+    n_cols = 2 + per_a * len(groups)
+    t = doc.add_table(rows=2, cols=n_cols)
     t.style = "Table Grid"
     t.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    hdr = t.rows[0]
-    for i, htxt in enumerate(["Analysis", "Value", "Efficacy"]
-                             + (["Futility"] if has_lower else [])):
-        hdr.cells[i].text = htxt
-        for run in hdr.cells[i].paragraphs[0].runs:
+
+    # header row 0: alpha labels spanning each Efficacy/Futility pair
+    r0, r1 = t.rows[0], t.rows[1]
+    for gi, g in enumerate(groups):
+        c0 = 2 + gi * per_a
+        cell = r0.cells[c0]
+        if per_a > 1:
+            cell = cell.merge(r0.cells[c0 + per_a - 1])
+        cell.text = f"α = {g['alpha']}"
+        for run in cell.paragraphs[0].runs:
+            run.bold = True
+    # header row 1: Analysis | Value | Efficacy [| Futility] per group
+    r1.cells[0].text = "Analysis"
+    r1.cells[1].text = "Value"
+    for gi in range(len(groups)):
+        c0 = 2 + gi * per_a
+        r1.cells[c0].text = "Efficacy"
+        if has_lower:
+            r1.cells[c0 + 1].text = "Futility"
+    for cell in list(r1.cells) + [r0.cells[0], r0.cells[1]]:
+        for run in cell.paragraphs[0].runs:
+            run.bold = True
+    for ci in (0, 1):  # merge Analysis/Value cells over both header rows
+        merged = r0.cells[ci].merge(r1.cells[ci])
+        merged.text = "Analysis" if ci == 0 else "Value"
+        for run in merged.paragraphs[0].runs:
             run.bold = True
 
     h_pair = h_mat[0] if (h_mat and isinstance(h_mat[0], list)) else h_mat
@@ -298,39 +327,55 @@ for ep in endpoints:
         if n_sel:
             label += f"\nN = {n_sel:.0f}"
         label += f"\nEvents: {st.get('d')}"
-
-        block = []  # (value_label, superscript, efficacy, futility, span)
-        if k > 1 and len(w_mat) >= k:
-            w_row = w_mat[k - 1][:k]
-            w_lbl = ", ".join(f"w{j+1}" for j in range(k))
-            block.append((w_lbl, "a",
-                          ", ".join(fmt(x, 2) for x in w_row), None, True))
-        block.append(("h1, h2", "b", h_txt, None, True))
-
-        zu = st.get("z_upper")
-        zl = st.get("z_lower") if (has_lower and not is_fa) else None
-        block.append(("Z", "", fmt(zu, 4),
-                      fmt(zl, 4) if zl is not None else "NA", False))
-        block.append(("p (1-sided)", "c",
-                      fmt(st.get("nominal_p_upper"), 4),
-                      fmt(upper_tail_p(zl), 4) if zl is not None else "NA",
-                      False))
         d_ev = st.get("d")
-        block.append(("HR at bound", "d",
-                      fmt(hr_at_bound(zu, d_ev, r_ratio), 4),
-                      fmt(hr_at_bound(zl, d_ev, r_ratio), 4)
-                      if zl is not None else "NA", False))
 
         first_row_idx = len(t.rows)
-        for (lbl, sup, eff, futv, span) in block:
+
+        # w and h rows span all alpha columns (same for every alpha)
+        span_rows = []
+        if k > 1 and len(w_mat) >= k:
+            w_row = w_mat[k - 1][:k]
+            span_rows.append((", ".join(f"w{j+1}" for j in range(k)), "a",
+                              ", ".join(fmt(x, 2) for x in w_row)))
+        span_rows.append(("h1, h2", "b", h_txt))
+        for (lbl, sup, val) in span_rows:
             cells = t.add_row().cells
             sup_label(cells[1], lbl, sup)
-            cells[2].text = eff
-            if has_lower:
-                if span:
-                    cells[2].merge(cells[3])
-                else:
-                    cells[3].text = "" if futv is None else futv
+            spanned = cells[2]
+            if n_cols > 3:
+                spanned = spanned.merge(cells[n_cols - 1])
+            spanned.text = val
+
+        # Z / p / HR rows: one Efficacy[,Futility] pair per alpha group
+        def group_vals(kind):
+            vals = []
+            for g in groups:
+                gst = g["stages"].get(k, {})
+                zu = gst.get("z_upper")
+                zl = gst.get("z_lower") if (has_lower and not is_fa) else None
+                if kind == "z":
+                    vals.append(fmt(zu, 4))
+                    if has_lower:
+                        vals.append(fmt(zl, 4) if zl is not None else "NA")
+                elif kind == "p":
+                    vals.append(fmt(gst.get("nominal_p_upper"), 4))
+                    if has_lower:
+                        vals.append(fmt(upper_tail_p(zl), 4)
+                                    if zl is not None else "NA")
+                else:  # hr
+                    vals.append(fmt(hr_at_bound(zu, d_ev, r_ratio), 4))
+                    if has_lower:
+                        vals.append(fmt(hr_at_bound(zl, d_ev, r_ratio), 4)
+                                    if zl is not None else "NA")
+            return vals
+
+        for (lbl, sup, kind) in [("Z", "", "z"), ("p (1-sided)", "c", "p"),
+                                 ("HR at bound", "d", "hr")]:
+            cells = t.add_row().cells
+            sup_label(cells[1], lbl, sup)
+            for ci, val in enumerate(group_vals(kind)):
+                cells[2 + ci].text = val
+
         # merge the Analysis cell vertically over this block
         top = t.rows[first_row_idx].cells[0]
         for ri in range(first_row_idx + 1, len(t.rows)):

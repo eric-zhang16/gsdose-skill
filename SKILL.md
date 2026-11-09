@@ -464,6 +464,18 @@ workflow A reports and workflow B re-evaluates at the actual event counts.)*
     alpha early (Pocock-like)." Record it as `sfpar` — it is required with HSD
     and ignored with OF.
 
+    11d. **Alpha sensitivity display (optional).** "Do you want the boundaries
+    shown for any additional alpha levels, side by side, as a sensitivity view?
+    (A common SAP convention — e.g., alpha = 0.021, 0.024 and 0.025 in one table.)"
+    - A) No — just the assigned alpha
+    - B) Yes — list the additional alpha level(s)
+
+    Record them as `alpha_sensitivity` in the boundary config. Each extra alpha
+    gets its own Efficacy/Futility column pair in the report's boundary table.
+    When a futility bound is enabled, each sensitivity column spends 1 − that
+    alpha with the same futility spending function. These columns are display
+    only — the assigned alpha (11a) remains the testing basis.
+
 12. **Futility (lower) bound (per endpoint).** "Do you also want a futility
     boundary — a line below which the trial would stop early for lack of benefit?"
     - A) No — efficacy bound only
