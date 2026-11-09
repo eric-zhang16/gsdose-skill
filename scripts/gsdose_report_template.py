@@ -22,6 +22,7 @@ Sections:
 """
 
 import json
+import math
 import os
 import sys
 from docx import Document
@@ -209,41 +210,152 @@ for ep in endpoints:
 
 
 # ==============================================================================
-# Section 3: Efficacy Boundaries
+# Section 3: Efficacy (and Futility) Boundaries — SAP-style per-analysis blocks
 # ==============================================================================
 
-add_heading(doc, "3. Efficacy Boundaries", 1)
+def upper_tail_p(z):
+    """One-sided upper-tail p for a standard normal z."""
+    return 0.5 * math.erfc(z / math.sqrt(2.0))
+
+def hr_at_bound(z, d, r):
+    """Approximate HR required to achieve significance at the boundary z with
+    d events and dose:control randomization ratio r (Schoenfeld)."""
+    return math.exp(-z * (1.0 + r) / math.sqrt(d * r))
+
+def parse_ratio(val):
+    """'2:1' -> 2.0; '1:1'/missing -> 1.0; numbers pass through."""
+    try:
+        if isinstance(val, str) and ":" in val:
+            a, b = val.split(":")
+            return float(a) / float(b)
+        return float(val)
+    except (TypeError, ValueError):
+        return 1.0
+
+def sup_label(cell, base, sup):
+    """Write 'base' with superscript 'sup' into a table cell."""
+    p = cell.paragraphs[0]
+    p.add_run(base)
+    if sup:
+        run = p.add_run(sup)
+        run.font.superscript = True
+
+any_lower = any(
+    (ep.get("futility") or {}).get("enabled") and
+    any("z_lower" in st for st in ep.get("stages", []))
+    for ep in endpoints
+)
+add_heading(doc, "3. Efficacy and Futility Boundaries" if any_lower
+            else "3. Efficacy Boundaries", 1)
+
+r_ratio = parse_ratio(m("randomization_ratio", 1))
+try:
+    n_sel = (float(m("n1_per_arm")) * (1 + 1 / r_ratio)
+             + float(m("n2_per_arm")) * (1 + 1 / r_ratio))
+except (TypeError, ValueError):
+    n_sel = None
 
 for ep in endpoints:
     name = ep.get("name", "")
     stages = ep.get("stages", [])
     s_total = ep.get("s", len(stages))
+    w_mat = ep.get("w") or []
+    h_mat = ep.get("h") or []
     if len(endpoints) > 1:
         add_heading(doc, name, 2)
 
     add_para(
         doc,
-        (f"Efficacy boundaries for the inverse normal combination test, from "
-         f"spending alpha = {ep.get('alpha')} with "
-         f"{spending_label(ep.get('sf'), ep.get('sfpar'))} at the observed/planned "
-         f"information fractions."),
+        (f"{name} efficacy and futility boundaries for both individual and "
+         f"intersection hypotheses of the selected dose, from spending "
+         f"alpha = {ep.get('alpha')} with "
+         f"{spending_label(ep.get('sf'), ep.get('sfpar'))} at the "
+         f"observed/planned information fractions."),
     )
 
     fut = ep.get("futility") or {}
     has_lower = fut.get("enabled") and any("z_lower" in st for st in stages)
-    headers = ["Analysis", "Information fraction", "Z boundary (efficacy)",
-               "Nominal one-sided p"]
-    if has_lower:
-        headers.append("Z boundary (futility)")
-    trows = []
+
+    n_cols = 4 if has_lower else 3
+    t = doc.add_table(rows=1, cols=n_cols)
+    t.style = "Table Grid"
+    t.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    hdr = t.rows[0]
+    for i, htxt in enumerate(["Analysis", "Value", "Efficacy"]
+                             + (["Futility"] if has_lower else [])):
+        hdr.cells[i].text = htxt
+        for run in hdr.cells[i].paragraphs[0].runs:
+            run.bold = True
+
+    h_pair = h_mat[0] if (h_mat and isinstance(h_mat[0], list)) else h_mat
+    h_txt = ", ".join(fmt(x, 2) for x in h_pair) if h_pair else ""
+
     for st in stages:
-        label = f"IA{st['stage']}" if st["stage"] < s_total else "FA"
-        row = [label, pct(st.get("info_frac", 0)), fmt(st.get("z_upper"), 3),
-               fmt(st.get("nominal_p_upper"), 4)]
-        if has_lower:
-            row.append(fmt(st.get("z_lower"), 3))
-        trows.append(row)
-    add_table(doc, headers, trows)
+        k = st["stage"]
+        is_fa = (k == s_total)
+        label = "FA" if is_fa else f"IA{k}"
+        label += f": {pct(st.get('info_frac', 0), 0)}"
+        if n_sel:
+            label += f"\nN = {n_sel:.0f}"
+        label += f"\nEvents: {st.get('d')}"
+
+        block = []  # (value_label, superscript, efficacy, futility, span)
+        if k > 1 and len(w_mat) >= k:
+            w_row = w_mat[k - 1][:k]
+            w_lbl = ", ".join(f"w{j+1}" for j in range(k))
+            block.append((w_lbl, "a",
+                          ", ".join(fmt(x, 2) for x in w_row), None, True))
+        block.append(("h1, h2", "b", h_txt, None, True))
+
+        zu = st.get("z_upper")
+        zl = st.get("z_lower") if (has_lower and not is_fa) else None
+        block.append(("Z", "", fmt(zu, 4),
+                      fmt(zl, 4) if zl is not None else "NA", False))
+        block.append(("p (1-sided)", "c",
+                      fmt(st.get("nominal_p_upper"), 4),
+                      fmt(upper_tail_p(zl), 4) if zl is not None else "NA",
+                      False))
+        d_ev = st.get("d")
+        block.append(("HR at bound", "d",
+                      fmt(hr_at_bound(zu, d_ev, r_ratio), 4),
+                      fmt(hr_at_bound(zl, d_ev, r_ratio), 4)
+                      if zl is not None else "NA", False))
+
+        first_row_idx = len(t.rows)
+        for (lbl, sup, eff, futv, span) in block:
+            cells = t.add_row().cells
+            sup_label(cells[1], lbl, sup)
+            cells[2].text = eff
+            if has_lower:
+                if span:
+                    cells[2].merge(cells[3])
+                else:
+                    cells[3].text = "" if futv is None else futv
+        # merge the Analysis cell vertically over this block
+        top = t.rows[first_row_idx].cells[0]
+        for ri in range(first_row_idx + 1, len(t.rows)):
+            top = top.merge(t.rows[ri].cells[0])
+        top.text = label
+
+    # footnotes
+    foot = doc.add_paragraph()
+    foot_runs = [
+        ("a", " weights to combine the incremental test statistics for cohort 1: "
+              "w1 is the weight for the data up to the first testing analysis, "
+              "w2, w3, ... for each later increment. The weights are proportional "
+              "to the expected events across analyses from cohort 1."),
+        ("b", " weights to combine the cohort-1 and cohort-2 statistics, "
+              "proportional to the expected sample sizes for cohorts 1 and 2."),
+        ("c", " p (1-sided) is the nominal alpha for group sequential testing."),
+        ("d", " HR at bound is the approximate hazard ratio required to achieve "
+              "significance at the boundary, for reference purposes."),
+    ]
+    for supc, txt in foot_runs:
+        run = foot.add_run(supc)
+        run.font.superscript = True
+        run.font.size = Pt(9)
+        run2 = foot.add_run(txt + "\n")
+        run2.font.size = Pt(9)
 
     if has_lower:
         add_para(
@@ -251,7 +363,9 @@ for ep in endpoints:
             ("The futility (lower) boundary spends a total probability of "
              f"{fut.get('total')} under the null hypothesis across stages using "
              f"{spending_label(fut.get('sf'), fut.get('sfpar'))}; it is a "
-             "null-based spending rule, not a beta-spending rule."),
+             "null-based spending rule, not a beta-spending rule. The futility "
+             "bound is shown as NA at the final analysis, where only the efficacy "
+             "bound applies."),
             italic=True,
         )
     doc.add_paragraph()
