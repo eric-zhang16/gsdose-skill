@@ -6,7 +6,9 @@ description: >
   designs for oncology survival endpoints — using the R package gsDose (Zhang & Jin
   2025): inverse normal combination tests across pre/post dose-selection cohorts,
   Dunnett-based closed testing across dose arms, and alpha-spending efficacy
-  boundaries. Triggers on: inferentially seamless or seamless phase 2/3 design,
+  boundaries. The skill guides the user through a structured Q&A that collects
+  every required input one question at a time, then computes and reports.
+  Triggers on: inferentially seamless or seamless phase 2/3 design,
   adaptive phase 2/3, dose selection at interim, multi-arm multi-stage survival
   trial, combination test, Dunnett closed testing, adaptive dose dropping with
   group sequential boundaries, or any mention of gsDose.

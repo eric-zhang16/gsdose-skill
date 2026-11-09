@@ -7,6 +7,13 @@ from before and after dose selection are combined in the confirmatory inference.
 Built on the R package [gsDose](https://github.com/eric-zhang16/gsDose)
 (Zhang & Jin 2025, doi:10.1080/19466315.2025.2539831).
 
+**The skill's core is a structured Q&A**: it walks the user through the design
+one question at a time (Q1–Q12, plus an observed-data intake at an analysis) —
+collecting dose arms, sample sizes, cohort and stage weights, events, alpha
+spending and futility choices with validation and plain-English explanations at
+each step — then runs the gsDose calculations and delivers a standardized output
+bundle. Users don't need to know the package API; they need to know their trial.
+
 **Status: v0.1** — both workflows implemented and benchmarked: the bundled
 scripts and the end-to-end eval reproduce the package vignette's results exactly
 (design boundaries 2.963/2.267/2.029; IA3 boundary 2.224 with all four
